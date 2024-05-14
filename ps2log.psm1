@@ -1,14 +1,4 @@
-# Static Configurations   ***  DO NOT CHANGE  ***
-
-
-
-# Logger Configuration Options
-$maxFiles = 10
-$maxFileSize = 10   # in Megabytes
-$ps2logPath = "C:\PSLogger\"    #Sets base log file location. Logs are kept per script.
-#$logFormat = 1      # 1-Text, 2-CSV, 3-XMLCLI
-
-### Private Functions, Not Exported. ###
+##################### Private Functions, Not Exported. #####################
 
 # dtStamp - helper function that does the obvious.
 function dtStamp {
@@ -27,12 +17,14 @@ function dtStamp {
 } # End Of dtStamp Function
 
 
-### End Of Private Functions. ###
+##################### End Of Private Functions. #####################
 
-### Public Cmdlets ###
+
+
+##################### Public Cmdlets #####################
 
 <#
-    # ps2logConfig (new,get,set)
+    # ps2logConfig (new,set,get)
     # New - Generate New PSCustomObject to contain config information
     # Get - Get config information from a pre-made file
     # Set - Change config settings and write to file.
@@ -43,13 +35,11 @@ function dtStamp {
 function New-ps2LogConfig {
     [CmdletBinding(SupportsShouldProcess)]
     param (
-        [Parameter(Mandatory=$True,ValueFromPipeLine=$True,Position=0)]
-        [ValidateScript({Test-Path $_})]
-        [string] $path,
+        [Parameter(Mandatory=$false,ValueFromPipeLine=$True,Position=0)]
+        [string] $path= "$($env:HOMEPATH)\ps2log\config",
 
         [Parameter(Mandatory=$False,ValueFromPipeLine=$True,Position=1)]
-        [ValidateScript({if(!(Test-Path $_)){New-Item $_ -ItemType Directory}Test-Path $_})]
-        [string] $Logpath= "C:\Temp",
+        [string] $Logpath= "$($env:HOMEPATH)\ps2log\logs",
 
         [Parameter(Mandatory=$False,ValueFromPipeLine=$True,Position=2)]
         [ValidateRange({10..100})]
@@ -74,9 +64,12 @@ function New-ps2LogConfig {
 
     # Begin: Process Parameters into Object
     Begin {
-        if(!($path)){
-            exit(1)
+        if(!(Test-Path $path)){
+            New-Item $path -ItemType Directory -Force
         }
+    }
+
+    Process {
         $configObj = [PSCustomObject]@{
             Path = "$path\ps2log.config"
             LogPath = [string]$LogPath
@@ -87,9 +80,7 @@ function New-ps2LogConfig {
             LogLevel = [int]$LogLevel
             ConfigDate = [string] $(dtStamp 1)
         }
-    }
 
-    Process {
         $configObj | Out-File "$path\ps2log.config" -Force
     }
 
@@ -105,38 +96,36 @@ function Set-ps2LogConfig {
     [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory=$True,ValueFromPipeLine=$True,Position=0)]
-        [ValidateScript({Test-Path $_})]
         [string] $path,
 
         [Parameter(Mandatory=$False,ValueFromPipeLine=$True,Position=1)]
-        [ValidateScript({if(!(Test-Path $_)){New-Item $_ -ItemType Directory}Test-Path $_})]
-        [string] $Logpath= "C:\Temp",
+        [string] $Logpath,
 
         [Parameter(Mandatory=$False,ValueFromPipeLine=$True,Position=2)]
         [ValidateRange({10..100})]
-        [int] $MaxFiles = 10,
+        [int] $MaxFiles,
 
         [Parameter(Mandatory=$False,ValueFromPipeLine=$True,Position=3)]
         [ValidateRange({10..50})]
-        [int] $MaxFileSizeMB = 20,
+        [int] $MaxFileSizeMB,
 
         [Parameter(Mandatory=$False,ValueFromPipeLine=$True,Position=4)]
         [ValidateSet({$true,$false})]
-        [bool] $ArchiveLogs = $True,
+        [bool] $ArchiveLogs,
 
         [Parameter(Mandatory=$False,ValueFromPipeLine=$True,Position=5)]
         [ValidateRange({10..100})]
-        [int] $MaxArchiveFiles = 10,
+        [int] $MaxArchiveFiles,
 
         [Parameter(Mandatory=$False,ValueFromPipeLine=$True,Position=6)]
         [ValidateSet({1,2,3})]
-        [int] $LogLevel = 1  ## 1 = INFO, 2 = WARN, 3 = DEBUG (All logs contain error stacks)
+        [int] $LogLevel  ## 1 = INFO, 2 = WARN, 3 = DEBUG (All logs contain error stacks)
     )
 
     # Begin: Process Parameters into Object
     Begin {
-        if(!($path)){
-            exit(1)
+        if(!(Test-Path "$path\ps2log.config")){
+            Write-Host "The path for filename are invalid, please try again."
         }
         $configObj = [PSCustomObject]@{
             Path = "$path\ps2log.config"
@@ -146,7 +135,8 @@ function Set-ps2LogConfig {
             ArchiveLogs = [bool]$ArchiveLogs
             MaxArchiveFiles = [int]$MaxArchiveFiles
             LogLevel = [int]$LogLevel
-            ConfigDate = [string] $(dtStamp 1)
+            CreatedDate = [string] $(dtStamp 1)
+            LastModified = [string] $(dtStamp 1)
         }
     }
 
