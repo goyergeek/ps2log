@@ -18,6 +18,7 @@ $ver = "1.0.5172024b"
 # Class ps2LogConfig - 
 # Holds all configuration information needed for the ps2Log Logger Cmdlets.
 class ps2LogConfig {
+    static [string] $Version = $ver
     [ValidateNotNullOrEmpty()][string] $Name = "Default"
     [ValidateNotNullOrEmpty()][string] $LogPath = "$env:PS2Log\Logs"
     [ValidateRange(10,100)][Int32] $MaxFiles = 10
@@ -26,29 +27,19 @@ class ps2LogConfig {
     [bool] $ArchiveLogs = $false
     [ValidateRange(10,100)][Int32] $MaxArchiveFiles = 100
     [ValidateRange(1,3)][Int32] $LogLevel = 1     ### 1 = INFO, 2 = WARN, 3 = DEBUG (All logs contain error stacks)
-    hidden [string] $ConfigVersion = $ver
     hidden [guid] $Guid = [guid]::NewGuid().Guid
     hidden [datetime] $Created = $(Get-Date)
     hidden [datetime] $Modified = $(Get-Date)
-
+    
     ps2LogConfig() {
-        Write-Verbose "Default Configuration object created:"
-        Write-Verbose ($this.Name)
-        Write-Verbose ($this.LogPath)
-        Write-Verbose ($this.MaxFiles)
-        Write-Verbose ($this.MaxFileSizeMB)
-        Write-Verbose ($this.Enabled)
-        Write-Verbose ($this.ArchiveLogs)
-        Write-Verbose ($this.MaxArchiveFiles)
-        Write-Verbose ($this.LogLevel)
-        Write-Verbose ($this.ConfigVersion)
-        Write-Verbose ($this.Guid)
-        Write-Verbose ($this.Created)
-        Write-Verbose ($this.Modified)
+        
+        Write-Verbose "[ps2LogConfig] | Constructor | Default | Return: Default Class Instance"
+        
     }
 
 
     ps2LogConfig([hashtable]$info){
+        Write-Verbose "[ps2LogConfig] | Constructor | HashTable | Start : Process Table"
         switch ($info.Keys){
             'Name'              {$this.name = $info.Name}
             'LogPath'           {$this.LogPath = $info.LogPath}
@@ -63,6 +54,8 @@ class ps2LogConfig {
             'Created'           {$this.Created = $info.Created}
             'Modified'          {$this.Modified = $info.Modified}
         }
+        Write-Verbose "[ps2LogConfig] | Constructor | HashTable | End : Process Table"
+        Write-Verbose "[ps2LogConfig] | Constructor | HashTable | Return : Class Instance"
     }
 
     ps2LogConfig([xml]$xmlObj){
@@ -74,8 +67,9 @@ class ps2LogConfig {
     }
     
     [void] Save([string]$Path) {
-
+        
         $FinalPath = "$Path\$($this.Name)-ps2LogConfig.xml"
+        Write-Verbose "[ps2LogConfig]::Save(`$Path) | getXmlFromConfigs | Starting"     
         [xml]$xml = (getXmlFromConfigs -InputObject $this)
         
         if($Path){
@@ -87,7 +81,7 @@ class ps2LogConfig {
     }
 
     [void] Save() {
-
+        Write-Verbose "[ps2LogConfig]::Save() | Save XML to `$env:PS2Log | Processing"
         $FinalPath = "$env:PS2Log\$($this.Name)-ps2LogConfig.xml"
         [xml]$xml = (getXmlFromConfigs -InputObject $this)    
         if(!(Test-Path "$env:PS2Log")){New-Item -Path $env:PS2Log -ItemType Directory -Force -Confirm}
@@ -99,6 +93,7 @@ class ps2LogConfig {
 
 
 class ps2LogConfigList {
+    
     # Static Property to hold the list of ps2LogConfig Objects
     static [System.Collections.Generic.List[ps2LogConfig]] $ps2LogConfigs
 
@@ -114,6 +109,7 @@ class ps2LogConfigList {
 
         return $true
     }
+    #[string[]]$Configs = @(([ps2LogConfigList]::ps2LogConfigs.Name))
     
     
 
@@ -206,8 +202,20 @@ class ps2LogConfigList {
         #### Write Shit to XML Here ####
         #### Need to go fix XML Helper Function First ####
     }
+    
+    [string[]] ListConfigs() {
+        [string[]]$Result = [ps2LogConfigList]::ps2LogConfigs.Name -join ","
+        return $Result
+    }
 
-}
+    [ps2LogConfig[]]$Configs = $([ps2LogConfigList]::ps2LogConfigs)
+
+    ps2LogConfigList() {
+
+
+    }
+
+} # End Of Class Ps2LogConfigList
 
 $PS2LogConfigs = New-Object -TypeName ps2LogConfigList
 # 
@@ -239,37 +247,55 @@ function getHashTblFromParams{
         [Parameter(Mandatory=$true,ValueFromPipeline=$True,Position=0)]
         [string] $CommandName
     )
+    $VPrefix = "$CommandName | getHashTblFromParams |"
+    Write-Verbose "$VPrefix Start : getHashTblFromParams."
+
+    function bldArr(){
+        Write-Verbose "$VPrefix bldArr | Start : bldArr"
+        [hashtable] $hashTbl = @{}
+        Write-Verbose "$VPrefix bldArr | Process : Hashtable for $Name"
+        $hashTbl.Add("Name",$Name)
+        foreach($arg in $ps2LogParams.Name) {
+            Write-Debug "$VPrefix bldArr | Get : Value for $arg"
+            $a = (Get-Variable -Name $arg -ErrorAction SilentlyContinue).Value
+            if($a){
+                $defaultObject = $false
+                $hashTbl.Add($arg,$a)
+                Write-Verbose "$VPrefix bldArr | Add : {$arg : $a}"
+            }
+        }
+        #if($defaultObject){Write-Verbose "No bound parameters found default object created."}
+        Write-Verbose "$VPrefix bldArr | Return : Hashtable"
+        return $hashTbl
+    }
     
-    Write-Verbose "Executing function getHashTblFromParams for $CommandName"
     $ParameterList = (Get-Command -Name $CommandName).Parameters
     
-
     $ps2LogParams = ($ParameterList.Values | 
         Select-Object * | 
-        Where-Object{($_.ParameterSets.Keys -eq "ps2log")}
+        Where-Object{($_.ParameterSets.Keys -eq "ps2log" -and $_.Name -ne "Name")}
     )
     
-    Write-Verbose "Keys to Process: $($ps2LogParams.Name -join ",")"
-
-    [hashtable] $hashTbl = @{}
+    Write-Verbose "$VPrefix Keys to Process: $($ps2LogParams.Name -join ",")"
+    
     [bool] $defaultObject = $true
+    [string[]]$configNames = (Get-Variable -Name Name -ErrorAction SilentlyContinue).Value
+    $hashTblArr = @()
 
-    foreach($arg in $ps2LogParams.Name) {
-        Write-Verbose "Checking value for Key: $arg"
-        $a = (Get-Variable -Name $arg -ErrorAction SilentlyContinue).Value
-        if($a){
-            $defaultObject = $false
-            $hashTbl.Add($arg,$a)
-            Write-Verbose "Value for variable found adding to splat: {$arg : $a}"
-        }
-    }
-    if($defaultObject){Write-Verbose "No bound parameters found, default object created."}
-    
-    foreach($key in $hashTbl.Keys){
-        Write-Verbose "$key : $($hashTbl["$key"])" 
+    if($configNames){ Write-Verbose "$VPrefix Configs to Process : $($configNames -join ",")" }
+    if(!($configNames)){Write-Verbose "$VPrefix Configs to Process : None - Default Configuration"}
+
+    foreach($name in $configNames){
+        [hashtable] $hashTbl = (bldArr)
+        $hashTblArr += $hashTbl
     }
     
-    return [hashtable] $hashTbl
+    
+    Write-Verbose "$VPrefix Tables to Return: $($hashTblArr.Name -Join ",")" 
+    
+    Write-Verbose "$VPrefix Return : Hashtable Array"
+    
+    return [Array] $hashTblArr
 } # End Of Function getHashTblFromParams
 
 function getConfigsFromXml{
@@ -278,7 +304,7 @@ function getConfigsFromXml{
         [xml] $Xml,
         
         [Parameter(Mandatory=$true,ValueFromPipeLine=$true,Position=1)]
-        [srting] $CommandName
+        [string] $CommandName
     )
     
     Write-Verbose "Executing function getConfigsfromXml for $CommandName"
@@ -378,22 +404,22 @@ function updateModified(){
 
 
 <#
-    # ps2LogConfig (new,set,get)
-    # New - Instantiate an instance of ps2LogConfig with a default configuration
-    # Get - Get config information from a location
-    # Set - Change config settings and write to file.
+    # ps2LogConfig (new,get,set,add,remove,clear,save)
+    # New - Instantiate an instance of ps2LogConfig
+    # Get - Get config information from a file, or from $PS2LogConfigs
+    # Set - Change config settings within a file, or within a ps2LogConfig in $PS2LogConfigs
+    # Add - Add one or more configurations from a file or ps2LogConfig objects
+    # Remove - Remove one or more configurations by name or guid from a file or from $PS2LogConfigs
 #>
 
 # New-ps2LogConfig
 # Creates a new ps2log configuration file at the specified path.
 function New-ps2LogConfig {
     [CmdletBinding(SupportsShouldProcess)]
-    param (   
-        [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
-        [string] $Name,
+    param (
 
         [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
-        [string] $ConfigPath,
+        [string[]] $Name,
 
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
         [string] $Logpath,
@@ -406,8 +432,11 @@ function New-ps2LogConfig {
         [ValidateRange(10,50)]
         [int] $MaxFileSizeMB,
 
+        [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
+        [Bool] $Enabled,
+
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
-        [switch] $ArchiveLogs,
+        [Bool] $ArchiveLogs,
 
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
         [ValidateRange(10,100)]
@@ -423,132 +452,80 @@ function New-ps2LogConfig {
 
         # Collect relevant parameter names for ps2logConfig constructor
         $CommandName = $PSCmdlet.MyInvocation.InvocationName
-        Write-Verbose "Executing: $CommandName"
-        
-        
+        $VPrefix = "$CommandName |"
+        Write-Verbose "$VPrefix Start : Cmdlet Execution."
+           
     }
 
     Process {
 
-        Write-Verbose "$CommandName | Generate hash table"
-        $hashTbl = (getHashTblFromParams $CommandName)
+        Write-Verbose "$CommandName | Execute : getHashTblFromParams()"
+        $hashTblarr = (getHashTblFromParams $CommandName)
+        [ps2LogConfig[]]$configObj = @()
 
-        Write-Verbose "$CommandName | Start - Create new ps2LogConfig Object"
-        [ps2LogConfig]$configObj = [ps2LogConfig]::new($hashTbl)
+        if(!($hashTblArr)){
+            Write-Verbose "$CommandName | Execute : [ps2LogConfig]::new()"
+            [ps2LogConfig[]]$configObj += [ps2LogConfig]::new()
+        }
         
-              
+        if($hashTblArr){
+            Write-Verbose "$CommandName | Execute : [ps2LogConfig]::new()"
+            foreach($hashTbl in $hashTblArr){
+                
+                [ps2LogConfig[]]$configObj += [ps2LogConfig]::new($hashTbl)
+    
+            }     
+        }
     }
 
-    End {
-
+    End {        
+        Write-Verbose "$VPrefix End : Cmdlet Execution."
         Write-Output $configObj
+
     }
     
 } # End Of New-ps2LogConfig Cmdlet
 
-
-
-Function Out-ps2LogConfig {
-    [CmdletBinding(SupportsShouldProcess)]
-    param(
-        [Parameter(Mandatory=$True,ValueFromPipeline=$True,ParameterSetName="ps2Log")]
-        [ValidateScript({$_.GetType().Name -eq 'ps2LogConfig'})]
-        [ps2LogConfig[]] $Config,
-
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
-        [ValidateScript({Test-Path $_})]
-        [string] $Path = $env:PS2Log
-
-    )
-
-    Begin {
-
-        $CommandName = $PSCmdlet.MyInvocation.InvocationName
-        Write-Verbose "Executing: $CommandName"
-
-
-    }
-
-    Process {
-        
-        $Config[0].Save($Config, $Path)
-
-    }
-
-    End {
-        Write-Output $configs
-    }
-} # End of Out-ps2LogConfig Cmdlet
-
-Function Add-ps2LogConfig {
-    [CmdletBinding(SupportsShouldProcess)]
-    param(
-        [Parameter(Mandatory=$True,ValueFromPipeline=$True,ParameterSetName="ps2LogObjects",Position=0)]
-        [ValidateScript({$_.GetType().Name -eq 'ps2LogConfig'})]
-        [ps2LogConfig[]]$InputObjects,
-
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2LogXml")]
-        [ValidateScript({Test-Path $_})]
-        [string] $Path
-
-    )
-
-    Begin {
-
-        $CommandName = $PSCmdlet.MyInvocation.InvocationName
-        Write-Verbose "Executing: $CommandName"
-
-
-    }
-
-    Process {
-        Foreach($Object in $InputObjects){
-            $PS2LogConfigs::Add($Object)
-        }
-
-    }
-
-    End {
-        Write-Output $configs
-    }
-} # End of Add-ps2LogConfig Cmdlet
-
-
-
 Function Get-ps2LogConfig {
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory=$True,ValueFromPipeline=$True,ParameterSetName="ps2LogFilePath")]
+        [Parameter(Mandatory=$False,ValueFromPipeline=$True,ParameterSetName="ps2LogPath")]
         [ValidateScript({Test-Path $_})]
-        [string] $Path,
+        [string[]] $Path,
 
-        [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
-        [string] $Name
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2LogPath")]
+        [string[]] $Name
 
     )
 
     Begin {
 
-        [xml]$ps2LogConfig = Get-Content $Path
+        $CommandName = $PSCmdlet.MyInvocation.InvocationName
+        Write-Verbose "Executing: $CommandName"
+           
+        
+        if ($Path) {
+            [xml]$ps2LogConfig = Get-Content $Path
+            [array]$configs = (getConfigsFromXml $ps2LogConfig $CommandName)
+        }
 
-
+        if(!($Path)){[array]$configs = ($PS2LogConfigs::ps2LogConfigs)}
     }
 
     Process {
-        [array]$configs = (getConfigsFromXml $ps2LogConfig)
-        
-        if($Name){
-            $configs = $configs | Where-Object {$_.Name -eq $Name}
-        }
 
+        if($Name){[array]$configs = $configs | Where-Object {$Name -Contains $_.Name}}
+        if(!($configs)){
+            throw "Get-ps2LogConfig did not return any configurations with the given parameters."
+        }
+        
     }
 
     End {
         Write-Output $configs
     }
 } # End of Get-ps2LogConfig
-
-
 
 function Set-ps2LogConfig {
     [CmdletBinding(SupportsShouldProcess)]
@@ -629,11 +606,80 @@ function Set-ps2LogConfig {
 
 
 
-Export-ModuleMember -Function New-ps2LogConfig
-Export-ModuleMember -Function Get-ps2LogConfig
-Export-ModuleMember -Function Set-ps2LogConfig
-Export-ModuleMember -Function Out-ps2LogConfig
-Export-ModuleMember -Function Add-ps2LogConfig
 
-Export-ModuleMember -Variable PS2LogConfigList
-Export-ModuleMember -Variable PS2LogConfigs
+Function Out-ps2LogConfig {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory=$True,ValueFromPipeline=$True,ParameterSetName="ps2Log")]
+        [ValidateScript({$_.GetType().Name -eq 'ps2LogConfig'})]
+        [ps2LogConfig[]] $Config,
+
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
+        [ValidateScript({Test-Path $_})]
+        [string] $Path = $env:PS2Log
+
+    )
+
+    Begin {
+
+        $CommandName = $PSCmdlet.MyInvocation.InvocationName
+        Write-Verbose "Executing: $CommandName"
+
+
+    }
+
+    Process {
+        
+        $Config[0].Save($Config, $Path)
+
+    }
+
+    End {
+        Write-Output $configs
+    }
+} # End of Out-ps2LogConfig Cmdlet
+
+Function Add-ps2LogConfig {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory=$True,ValueFromPipeline=$True,ParameterSetName="ps2LogObjects",Position=0)]
+        [ValidateScript({$_.GetType().Name -eq 'ps2LogConfig'})]
+        [ps2LogConfig[]]$InputObjects,
+
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2LogXml")]
+        [ValidateScript({Test-Path $_})]
+        [string] $Path
+
+    )
+
+    Begin {
+
+        $CommandName = $PSCmdlet.MyInvocation.InvocationName
+        Write-Verbose "Executing: $CommandName"
+
+
+    }
+
+    Process {
+        Foreach($Object in $InputObjects){
+            $PS2LogConfigs::Add($Object)
+        }
+
+    }
+
+    End {
+        Write-Output $configs
+    }
+} # End of Add-ps2LogConfig Cmdlet
+
+
+
+
+
+
+
+
+
+
+Export-ModuleMember -Function *-ps2LogConfig
+Export-ModuleMember -Variable PS2LogConfigList, PS2LogConfigs

@@ -15,8 +15,8 @@
                         <Alignment>Left</Alignment>
                     </TableColumnHeader>
                     <TableColumnHeader>
-                        <Label>LogPath</Label>
-                        <Width>40</Width>
+                        <Label>Enabled</Label>
+                        <Width>8</Width>
                         <Alignment>Left</Alignment>
                     </TableColumnHeader>
                     <TableColumnHeader>
@@ -25,8 +25,8 @@
                         <Alignment>Left</Alignment>
                     </TableColumnHeader>
                     <TableColumnHeader>
-                        <Label>Enabled</Label>
-                        <Width>8</Width>
+                        <Label>LogPath</Label>
+                        <Width>40</Width>
                         <Alignment>Left</Alignment>
                     </TableColumnHeader>
                 </TableHeaders>
@@ -37,13 +37,15 @@
                                 <PropertyName>Name</PropertyName>
                             </TableColumnItem>
                             <TableColumnItem>
-                                <PropertyName>LogPath</PropertyName>
+                                <PropertyName>Enabled</PropertyName>
+                                <Alignment>Center</Alignment>
                             </TableColumnItem>
                             <TableColumnItem>
                                 <PropertyName>LogLevel</PropertyName>
+                                <Alignment>Center</Alignment>
                             </TableColumnItem>
                             <TableColumnItem>
-                                <PropertyName>Enabled</PropertyName>
+                                <PropertyName>LogPath</PropertyName>
                             </TableColumnItem>
                         </TableColumnItems>
                     </TableRowEntry>
@@ -59,7 +61,7 @@
                 <AutoSize/>
                 <TableHeaders>
                     <TableColumnHeader>
-                        <Label>Ps2LogConfigs</Label>
+                        <Label>Configs</Label>
                         <Width>40</Width>
                         <Alignment>Left</Alignment>
                     </TableColumnHeader>
@@ -68,7 +70,7 @@
                     <TableRowEntry>
                         <TableColumnItems>
                             <TableColumnItem>
-                                <Scriptblock>$PS2LogConfigs::ps2LogConfigs.Name -join ","</Scriptblock>
+                                <Scriptblock>$PS2LogConfigs::ps2LogConfigs.Name -join ", "</Scriptblock>
                             </TableColumnItem>
                         </TableColumnItems>
                     </TableRowEntry>

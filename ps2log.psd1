@@ -9,7 +9,7 @@
 @{
 
 # Script module or binary module file associated with this manifest.
-RootModule = 'ps2log.psm1'
+RootModule = '.\ps2log.psm1'
 
 # Version number of this module.
 ModuleVersion = '1.1.06112024'
@@ -21,19 +21,19 @@ ModuleVersion = '1.1.06112024'
 GUID = '897436ce-1b57-4dce-baeb-4bc3308e3238'
 
 # Author of this module
-Author = 'Jason Goyer'
+Author = 'Jason Goyer - git-hub@protonmail.com'
 
 # Company or vendor of this module
 CompanyName = 'Simply Savage Inc.'
 
 # Copyright statement for this module
-Copyright = '(c) Jason Goyer. All rights reserved.'
+Copyright = '(c) Jason Goyer. All rights reserved 2023-2024.'
 
 # Description of the functionality provided by this module
 Description = 'Provides logging functionality for scripts.'
 
 # Minimum version of the PowerShell engine required by this module
-PowerShellVersion = '5.1.19041'
+PowerShellVersion = '7.4.2'
 
 # Name of the PowerShell host required by this module
 # PowerShellHostName = ''
@@ -60,22 +60,22 @@ ClrVersion = '4.0.30319'
 # ScriptsToProcess = @()
 
 # Type files (.ps1xml) to be loaded when importing this module
-# TypesToProcess = @()
+#TypesToProcess = @("ps2LogConfig.format.ps1xml")
 
 # Format files (.ps1xml) to be loaded when importing this module
-# FormatsToProcess = @()
+FormatsToProcess = @('ps2Log.Format.ps1xml')
 
 # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @()
+FunctionsToExport = @('*-ps2LogConfig')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()
 
 # Variables to export from this module
-VariablesToExport = '*'
+VariablesToExport = @('*')
 
 # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
 AliasesToExport = @()
