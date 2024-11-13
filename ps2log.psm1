@@ -39,6 +39,8 @@ class ps2LogConfig {
 
 
     ps2LogConfig([hashtable]$info){
+        Write-Verbose $info.Keys
+        Write-Verbose $info.Values
         Write-Verbose "[ps2LogConfig] | Constructor | HashTable | Start : Process Table"
         switch ($info.Keys){
             'Name'              {$this.name = $info.Name}
@@ -83,9 +85,13 @@ class ps2LogConfig {
     [void] Save() {
         Write-Verbose "[ps2LogConfig]::Save() | Save XML to `$env:PS2Log | Processing"
         $FinalPath = "$env:PS2Log\$($this.Name)-ps2LogConfig.xml"
-        [xml]$xml = (getXmlFromConfigs -InputObject $this)    
+        $ConfigList += $this
+        [xml]$xml = (getXmlFromConfigs -ConfigList $ConfigList)
         if(!(Test-Path "$env:PS2Log")){New-Item -Path $env:PS2Log -ItemType Directory -Force -Confirm}
+        #Write-Host $xml1
+        #Write-Host $xml2
         $xml.Save($FinalPath)
+        #$xml2.Save($FinalPath2)
 
     }
 
@@ -153,27 +159,79 @@ class ps2LogConfigList {
     static [void] Clear() {
         [ps2LogConfigList]::Initialize()
         [ps2LogConfigList]::ps2LogConfigs.Clear()
+        [ps2LogConfigList]::Add([ps2LogConfig]::new())
     }
 
     # Find a specific Configuration in the list
-    static [ps2LogConfig] Find([string]$Value){
+    static [ps2LogConfig[]] Find([string[]]$Values){
         [ps2LogConfigList]::Initialize()
-        $Index = [ps2LogConfigList]::ps2LogConfigs.FindIndex({
-            param($b)
-            $b.Name -eq $Value
-        }.GetNewClosure())
-        if($index -ge 0){
-            return [ps2LogConfigList]::ps2LogConfigs[$index]
+        [ps2LogConfig[]]$Results = @()
+        foreach($Value in $Values){
+            $Index = [ps2LogConfigList]::ps2LogConfigs.FindIndex({
+                param($b)
+                $b.Name -eq $Value
+            }.GetNewClosure())
+            if($index -ge 0){
+                $Results += [ps2LogConfigList]::ps2LogConfigs[$index]
+            }
+            if(!($index)){
+                Write-Error -Message "No Index was found for Value $Value"
+            }
+        }
+
+        if(!($Results)){
+            throw "No Indexes were found for any values provided."
+        }
+        return $Results
+        
+    }
+
+    # Find a specific Configuration in the list
+    static [ps2Logconfig[]] GetByKey([string[]]$Keys,[array]$Values){
+        [ps2LogConfigList]::Initialize()
+        $b = [ps2LogConfigList]::ps2LogConfigs
+        [array]$indicies = @()
+        [ps2LogConfig[]]$Results = @()
+
+        forEach($Key in $Keys) {
+            Write-Verbose "Key: $Key"
+            Write-Verbose "Key Type: $($Key.GetType().Name)"
+            foreach($Value in $Values){
+                Write-Verbose "Value: $Value"
+                Write-Verbose "Value Type: $($Value.GetType().Name)"
+                if($Value.GetType().Name -eq "boolean") {
+                    $Value = $Value.toString()
+                    Write-Verbose "Value was boolean, converted to string and running if"
+                    $indicies += 0..($b.Count-1) | Where-Object {$($b[$_].$key.ToString()) -eq $Value.ToString()}
+                } else {
+                    Write-Verbose "Value was not boolean, running standard"
+                    $indicies += 0..($b.Count-1) | Where-Object {$b[$_].$key.ToString() -eq $Value.ToString()}
+                }
+                
+                Write-Verbose "Value Loop [$Value]: $($indicies -join ",")"
+                #$Results += $indicies | ForEach-Object {$b[$_]}
+                #$indicies | Select-Object -Unique
+            }
+            $indicies | Select-Object -Unique
+            Write-Verbose "Key Loop [$key]: $($indicies -join ",")"
         }
         
-        throw "The list did not contain a configuration item with the Name: $Value"
+        $indicies = $indicies | Select-Object -Unique
+        Write-Verbose "Post Loops: $($indicies -join ",")"
+        $Results += $indicies | ForEach-Object {$b[$_]}
+        #Write-Verbose $indicies.ToString()
+
+        if(!($Results)){
+            throw "No Indicies were found for any values provided."
+        }
+        return $Results
         
     }
 
     # Find every configuration matching the filtering scriptblock
-    static [ps2LogConfig[]] FindAll([scriptblock]$Predicate) {
+    static [ps2LogConfig[]] GetAll() {
         [ps2LogConfigList]::Initialize()
-        return [ps2LogConfigList]::Books.FindAll($Predicate)
+        return [ps2LogConfigList]::ps2LogConfigs
     }
 
     # Remove a specific configuration
@@ -196,11 +254,18 @@ class ps2LogConfigList {
 
     static [void] Save() {
         [ps2LogConfigList]::Initialize()
-        $configXml = getXmlFromConfigs $([ps2LogConfigList]::ps2LogConfigs)
+        $tmpConfig = [Ps2LogconfigList]::ps2LogConfigs
+        $tmpConfig
+        [xml]$configXml = getXmlFromConfigs -ConfigList $tmpConfig
         $configXml.Save($("$env:PS2Log\ps2LogConfig.xml"))
+    }
 
-        #### Write Shit to XML Here ####
-        #### Need to go fix XML Helper Function First ####
+    static [void] Save($Path) {
+        [ps2LogConfigList]::Initialize()
+        $tmpConfig = [Ps2LogconfigList]::ps2LogConfigs
+        $tmpConfig
+        [xml]$configXml = getXmlFromConfigs -ConfigList $tmpConfig
+        $configXml.Save($("$Path\ps2LogConfig.xml"))
     }
     
     [string[]] ListConfigs() {
@@ -208,7 +273,7 @@ class ps2LogConfigList {
         return $Result
     }
 
-    [ps2LogConfig[]]$Configs = $([ps2LogConfigList]::ps2LogConfigs)
+    $Configs = @()
 
     ps2LogConfigList() {
 
@@ -258,7 +323,7 @@ function getHashTblFromParams{
         foreach($arg in $ps2LogParams.Name) {
             Write-Debug "$VPrefix bldArr | Get : Value for $arg"
             $a = (Get-Variable -Name $arg -ErrorAction SilentlyContinue).Value
-            if($a){
+            if($a -or $a.GetType().Name -eq 'boolean'){
                 $defaultObject = $false
                 $hashTbl.Add($arg,$a)
                 Write-Verbose "$VPrefix bldArr | Add : {$arg : $a}"
@@ -310,16 +375,17 @@ function getConfigsFromXml{
     Write-Verbose "Executing function getConfigsfromXml for $CommandName"
     if(!($xml.ps2LogConfigs.version -eq $ver)){Write-Warning "Log File version does not match Module Version! Configuration may fail!"}
     [array]$configs = $xml.ps2LogConfigs.Config
+    Write-Verbose "$($configs.Name)"
     $keyList = ($configs[0] | Get-Member -Force | Where-Object{$_.MemberType -eq 'Property'}).Name
     Write-Verbose "Keys to process: $($keyList -join ",")"
     [array]$configs = ($xml.ps2LogConfigs.Config)
     Write-Verbose "Configuration Count in file: $($configs.Count)"
 
-    [ps2LogConfig[]]$ps2LogConfigs = @{}
+    [ps2LogConfig[]]$LogConfigs = @()
     
 
-    foreach($ps2LogConfig in $ps2LogConfigs){
-        Write-Verbose "Building ps2LogConfig Object for $($config.Name)"
+    foreach($Config in $Configs){
+        Write-Verbose "Building ps2LogConfig Object for $($Config.Name)"
         [hashtable] $hashTbl = @{}
         foreach($key in $keyList) {
             $hashTbl.Add($key,$config.$key)
@@ -329,11 +395,11 @@ function getConfigsFromXml{
             Write-Verbose "$key : $($hashTbl["$key"])" 
         }
 
-        $ps2LogConfigs += [ps2LogConfig]::new($hashTbl)
+        $LogConfigs += [ps2LogConfig]::new($hashTbl)
 
     }
     
-    return [array] $ps2LogConfigs
+    return $LogConfigs
 } # End Of Function getConfigsFromXml
 
 function getXmlFromConfigs{
@@ -347,39 +413,51 @@ function getXmlFromConfigs{
 
     function tl([int]$int){return "`t" * $int}
     [string]$xmlString = ""
-    $filter = @("Guid","ConfigVersion")
-    [array]$elementList = ($this | Get-Member -Force | Where-Object {$_.MemberType -eq "Property" -and $filter -notcontains $_.Name}).Name
+    $filter = @("Guid","ConfigVersion", "Name")
+    
     $header1 = "<?xml version=`"1.0`" encoding=`"utf-8`"?>`n"
-    $header2 = "<ps2LogConfigs type=`"ps2log`" version=`"$($this.ConfigVersion)`">`n"
+    
     $configClose = "$(tl 1)</Config>`n"
     $footer = "</ps2LogConfigs>"
-    [string]$xmlString += $header1,$header2
+    
 
     if($ConfigList){
-        foreach($ps2LogConfig in $ConfigList::ps2LogConfigs){
-            $configOpen = "$(tl 1)<Config Name=`"$($this.Name)`" Guid=`"$($this.Guid)`">`n"
+        [array]$elementList = ($ConfigList[0] | Get-Member -Force | Where-Object {$_.MemberType -eq "Property" -and $filter -notcontains $_.Name}).Name
+        $header2 = "<ps2LogConfigs type=`"ps2log`" version=`"$($ConfigList[0]::Version)`">`n"
+        [string]$xmlString += $header1,$header2
+
+        foreach($ps2LogConfig in $ConfigList){
+            $configOpen = "$(tl 1)<Config Name=`"$($ps2LogConfig.Name)`" Guid=`"$($ps2LogConfig.Guid)`">`n"
             $xmlString += $configOpen
             foreach($element in $elementList){
-                $configElement = "$(tl 2)<$($element)>$($this.$element)</$($element)>`n"
+                $configElement = "$(tl 2)<$($element)>$($ps2LogConfig.$element)</$($element)>`n"
                 $xmlString += $configElement
             }
+            
             $xmlString += $configClose
+
         }
     }
 
     if($inputObject){
-        $configOpen = "$(tl 1)<Config Name=`"$($this.Name)`" Guid=`"$($this.Guid)`">`n"
+        $header2 = "<ps2LogConfigs type=`"ps2log`" version=`"$($this::Version)`">`n"
+        [string]$xmlString += $header1,$header2
+        [array]$elementList = ($inputObject | Get-Member -Force | Where-Object {$_.MemberType -eq "Property" -and $filter -notcontains $_.Name}).Name
+        $configOpen = "$(tl 1)<Config Name=`"$($inputObject.Name)`" Guid=`"$($inputObject.Guid)`">`n"
         $xmlString += $configOpen
         foreach($element in $elementList){
             $configElement = "$(tl 2)<$($element)>$($this.$element)</$($element)>`n"
             $xmlString += $configElement
         }
-            $xmlString += $configClose
+
+        $xmlString += $configClose
+
     }
 
     $xmlString += $footer
     [xml]$xmlConfig = $xmlString
-    return [xml]$xmlConfig
+    return $xmlString
+    
 }
 
 function handleInputObject {
@@ -433,10 +511,10 @@ function New-ps2LogConfig {
         [int] $MaxFileSizeMB,
 
         [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
-        [Bool] $Enabled,
+        [Bool] $Enabled = $True,
 
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
-        [Bool] $ArchiveLogs,
+        [Bool] $ArchiveLogs = $False,
 
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
         [ValidateRange(10,100)]
@@ -489,13 +567,36 @@ function New-ps2LogConfig {
 Function Get-ps2LogConfig {
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory=$False,ValueFromPipeline=$True,ParameterSetName="ps2LogPath")]
+        [Parameter(Mandatory=$False,ValueFromPipeline=$True)]
         [ValidateScript({Test-Path $_})]
         [string[]] $Path,
 
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2LogPath")]
-        [string[]] $Name
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]
+        [string[]] $Name,
+
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]
+        [string[]] $LogPath,
+
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]
+        [int[]] $MaxFiles,
+
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]
+        [int[]] $MaxFileSize,
+
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]
+        [boolean] $Enabled,
+
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]
+        [boolean] $ArchiveLogs,
+
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]
+        [int[]] $MaxArchiveFiles,
+
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]
+        [int[]] $LogLevel,
+
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True)]
+        [string[]] $Guid
 
     )
 
@@ -503,20 +604,30 @@ Function Get-ps2LogConfig {
 
         $CommandName = $PSCmdlet.MyInvocation.InvocationName
         Write-Verbose "Executing: $CommandName"
+        $Configs = @()
            
         
-        if ($Path) {
-            [xml]$ps2LogConfig = Get-Content $Path
-            [array]$configs = (getConfigsFromXml $ps2LogConfig $CommandName)
-        }
-
-        if(!($Path)){[array]$configs = ($PS2LogConfigs::ps2LogConfigs)}
+        
     }
 
     Process {
 
-        if($Name){[array]$configs = $configs | Where-Object {$Name -Contains $_.Name}}
+        if ($Path) {
+            [xml]$xmlData = Get-Content $Path
+            $Configs += (getConfigsFromXml $xmlData $CommandName)
+        }
+
+        if($Name){
+            ForEach($Item in $Name){ 
+                $Configs += $PS2LogConfigs::ps2LogConfigs | Where-Object {$_.Name -eq $Item}
+            }
+        }
+
+        if(!($Path) -and !($Name)){[array]$configs = ($PS2LogConfigs::ps2LogConfigs)}
+
+        #if($Name){[array]$configs = $configs | Where-Object {$Name -Contains $_.Name}}
         if(!($configs)){
+
             throw "Get-ps2LogConfig did not return any configurations with the given parameters."
         }
         
@@ -530,23 +641,9 @@ Function Get-ps2LogConfig {
 function Set-ps2LogConfig {
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory=$false,ValueFromPipeline=$True,ParameterSetName="ps2logObjLoader")]
-        [ValidateScript({$_.GetType().Name -eq "ps2LogConfig"})]
-        [ps2LogConfig] $InputObject,
-
-        [Parameter(Mandatory=$false,ValueFromPipeline=$True,ParameterSetName="ps2logObjLoader")]
-        [ValidateScript({Test-Path $_})]
-        [string]$ConfigFile,
-
-        [Parameter(Mandatory=$false,ValueFromPipeline=$True,ParameterSetName="ps2logObjSetter")]
-        [ValidateScript({$_.GetType().Name -eq "hashtable"})]
-        [hashtable]$hashtable,
 
         [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
         [string] $Name,
-
-        [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
-        [string] $Path,
 
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
         [string] $Logpath,
@@ -560,7 +657,7 @@ function Set-ps2LogConfig {
         [int] $MaxFileSizeMB,
 
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
-        [switch] $ArchiveLogs,
+        [Boolean] $ArchiveLogs,
 
         [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
         [ValidateRange(10,100)]
@@ -581,20 +678,17 @@ function Set-ps2LogConfig {
     }
 
     Process {
-        if($inputObject){
-            # Do some Shit here
-        }
-
-        if($hashtable){
-            Write-Verbose "Huh?  How the hell did you get here?"
-        }
-
-        $hashTbl = (getHashTblFromParams $CommandName)
-        $configObj = [ps2LogConfig]::new($hashTbl)
         
-        if($InputObject) {
-
+        $tmpCfg = Get-Ps2LogConfig -Name $Name
+        ForEach($pair in $PSBoundParameters.GetEnumerator() | Where-Object{$_.Key -ne "Name"}){
+            Write-Host $pair.Key
+            $tmpKey = $pair.Key
+            $tmpCfg.$tmpKey = $pair.Value
+            $tmpCfg.Modified = (Get-Date)
         }
+
+        $configObj = Get-Ps2LogConfig -Name $Name
+            
     }
 
     End {
@@ -607,14 +701,22 @@ function Set-ps2LogConfig {
 
 
 
-Function Out-ps2LogConfig {
+Function Save-Ps2LogConfig {
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory=$True,ValueFromPipeline=$True,ParameterSetName="ps2Log")]
+
+        [Parameter(Mandatory=$False,ValueFromPipeline=$True,ParameterSetName="ps2LogObj")]
         [ValidateScript({$_.GetType().Name -eq 'ps2LogConfig'})]
         [ps2LogConfig[]] $Config,
 
-        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2Log")]
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2LogAll")]
+        [switch] $All,
+
+        [Parameter(Mandatory=$False,ValueFromPipeline=$True,ParameterSetName="ps2LogConfigs")]
+        [string[]] $Name,
+
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2LogObj")]
+        [Parameter(Mandatory=$False,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2LogConfigs")]
         [ValidateScript({Test-Path $_})]
         [string] $Path = $env:PS2Log
 
@@ -630,12 +732,17 @@ Function Out-ps2LogConfig {
 
     Process {
         
-        $Config[0].Save($Config, $Path)
+        if($Name){$Config = Get-Ps2LogConfig -Name $Name}
+        if(!($Config)){$PS2LogConfigs::Save($Path)}
+        if($Config){$Config.Save($Path)}
+        if($All){$PS2LogConfigs::ps2LogConfigs.Save($Path);$PS2LogConfigs::Save($Path)}
+        
 
     }
 
     End {
-        Write-Output $configs
+        $output = Get-ChildItem $Path
+        Write-Output $output
     }
 } # End of Out-ps2LogConfig Cmdlet
 
@@ -644,11 +751,7 @@ Function Add-ps2LogConfig {
     param(
         [Parameter(Mandatory=$True,ValueFromPipeline=$True,ParameterSetName="ps2LogObjects",Position=0)]
         [ValidateScript({$_.GetType().Name -eq 'ps2LogConfig'})]
-        [ps2LogConfig[]]$InputObjects,
-
-        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True,ParameterSetName="ps2LogXml")]
-        [ValidateScript({Test-Path $_})]
-        [string] $Path
+        [ps2LogConfig[]]$InputObjects
 
     )
 
@@ -672,7 +775,7 @@ Function Add-ps2LogConfig {
     }
 } # End of Add-ps2LogConfig Cmdlet
 
-
+New-Ps2LogConfig | Add-Ps2LogConfig
 
 
 

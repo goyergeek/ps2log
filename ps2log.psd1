@@ -9,10 +9,10 @@
 @{
 
 # Script module or binary module file associated with this manifest.
-RootModule = '.\ps2log.psm1'
+RootModule = 'D:\Projects\PowerShell\7.4\ps2log\ps2log.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.1.06112024'
+ModuleVersion = '1.1.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
